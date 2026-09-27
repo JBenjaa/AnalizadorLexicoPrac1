@@ -1,0 +1,6 @@
+int edad = 23;
+float precio = 150.50;
+
+if (edad >= 18) {
+    print("Mayor de edad");
+}
