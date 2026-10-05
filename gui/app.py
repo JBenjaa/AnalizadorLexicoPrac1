@@ -4,9 +4,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-# ==========================================================
-# CONFIGURACIÓN DE RUTAS
-# ==========================================================
+
+# ============================================================
+# RUTAS DEL PROYECTO
+# ============================================================
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys._MEIPASS)
@@ -14,802 +15,1107 @@ else:
     BASE_DIR = Path(__file__).resolve().parent.parent
 
 LEXER_PATH = BASE_DIR / "lexer" / "lexer.exe"
-# ==========================================================
-# VENTANA PRINCIPAL
-# ==========================================================
-
-ventana = tk.Tk()
-
-ventana.title("Analizador Léxico - MiniLang")
-ventana.geometry("1150x800")
-ventana.minsize(900, 600)
+PARSER_PATH = BASE_DIR / "parser" / "parser.py"
 
 
-# ==========================================================
-# CONFIGURACIÓN DE ESTILOS
-# ==========================================================
+# ============================================================
+# COLORES
+# ============================================================
 
-estilo = ttk.Style()
-
-estilo.configure(
-    "Treeview",
-    font=("Consolas", 10),
-    rowheight=28
-)
-
-estilo.configure(
-    "Treeview.Heading",
-    font=("Arial", 10, "bold")
-)
-
-estilo.configure(
-    "TButton",
-    font=("Arial", 10)
-)
+BG = "#f4f6f8"
+PANEL = "#ffffff"
+PRIMARY = "#2563eb"
+PRIMARY_DARK = "#1d4ed8"
+TEXT = "#1f2937"
+MUTED = "#6b7280"
+SUCCESS = "#15803d"
+ERROR = "#dc2626"
+WARNING = "#d97706"
 
 
-# ==========================================================
-# CONTENEDOR PRINCIPAL CON SCROLL
-# ==========================================================
+# ============================================================
+# APLICACIÓN
+# ============================================================
 
-# Canvas que contendrá toda la aplicación
-canvas = tk.Canvas(
-    ventana,
-    highlightthickness=0
-)
+class AnalizadorApp:
 
-canvas.pack(
-    side="left",
-    fill="both",
-    expand=True
-)
+    def __init__(self, root):
+        self.root = root
 
+        self.root.title("Analizador Léxico y Sintáctico")
+        self.root.geometry("1200x800")
+        self.root.minsize(1000, 700)
+        self.root.configure(bg=BG)
 
-# Scrollbar GENERAL de toda la aplicación
-scroll_general = ttk.Scrollbar(
-    ventana,
-    orient="vertical",
-    command=canvas.yview
-)
+        self.crear_interfaz()
+        self.cargar_ejemplo()
 
-scroll_general.pack(
-    side="right",
-    fill="y"
-)
+    # ========================================================
+    # INTERFAZ
+    # ========================================================
 
+    def crear_interfaz(self):
 
-# Frame que estará dentro del Canvas
-contenido = tk.Frame(
-    canvas
-)
+        # ----------------------------------------------------
+        # CONTENEDOR PRINCIPAL CON SCROLL
+        # ----------------------------------------------------
 
-ventana_canvas = canvas.create_window(
-    (0, 0),
-    window=contenido,
-    anchor="nw"
-)
-
-
-# ==========================================================
-# CONFIGURAR SCROLL GENERAL
-# ==========================================================
-
-def actualizar_scroll(event=None):
-
-    canvas.configure(
-        scrollregion=canvas.bbox("all")
-    )
-
-
-contenido.bind(
-    "<Configure>",
-    actualizar_scroll
-)
-
-
-# Hacer que el contenido ocupe todo el ancho disponible
-def ajustar_ancho(event):
-
-    canvas.itemconfig(
-        ventana_canvas,
-        width=event.width
-    )
-
-
-canvas.bind(
-    "<Configure>",
-    ajustar_ancho
-)
-
-
-# Scroll con la rueda del mouse
-def scroll_mouse(event):
-
-    canvas.yview_scroll(
-        int(-1 * (event.delta / 120)),
-        "units"
-    )
-
-
-canvas.bind_all(
-    "<MouseWheel>",
-    scroll_mouse
-)
-
-
-# ==========================================================
-# TÍTULO
-# ==========================================================
-
-titulo = tk.Label(
-    contenido,
-    text="ANALIZADOR LÉXICO - MINILANG",
-    font=("Arial", 22, "bold")
-)
-
-titulo.pack(
-    pady=(20, 5)
-)
-
-
-subtitulo = tk.Label(
-    contenido,
-    text="Analizador léxico desarrollado con FLEX + Python",
-    font=("Arial", 11)
-)
-
-subtitulo.pack(
-    pady=(0, 20)
-)
-
-
-# ==========================================================
-# FUNCIÓN PARA ACTUALIZAR NÚMEROS DE LÍNEA
-# ==========================================================
-
-def actualizar_lineas(event=None):
-
-    lineas_texto = editor.get(
-        "1.0",
-        tk.END
-    )
-
-    cantidad_lineas = lineas_texto.count("\n")
-
-    numeros = "\n".join(
-        str(numero)
-        for numero in range(
-            1,
-            cantidad_lineas + 1
-        )
-    )
-
-    numeros_linea.config(
-        state="normal"
-    )
-
-    numeros_linea.delete(
-        "1.0",
-        tk.END
-    )
-
-    numeros_linea.insert(
-        "1.0",
-        numeros
-    )
-
-    numeros_linea.config(
-        state="disabled"
-    )
-
-
-# ==========================================================
-# FUNCIÓN PARA ANALIZAR EL CÓDIGO
-# ==========================================================
-
-def analizar_codigo():
-
-    # Obtener código del editor
-    codigo = editor.get(
-        "1.0",
-        tk.END
-    ).strip()
-
-
-    # Verificar código vacío
-    if not codigo:
-
-        messagebox.showwarning(
-            "Advertencia",
-            "Debe ingresar código para analizar."
+        self.canvas = tk.Canvas(
+            self.root,
+            bg=BG,
+            highlightthickness=0
         )
 
-        return
-
-
-    # Verificar que exista lexer.exe
-    if not LEXER_PATH.exists():
-
-        messagebox.showerror(
-            "Error",
-            f"No se encontró el analizador léxico:\n\n{LEXER_PATH}"
+        self.scrollbar = ttk.Scrollbar(
+            self.root,
+            orient="vertical",
+            command=self.canvas.yview
         )
 
-        return
-
-
-    try:
-
-        # ==================================================
-        # EJECUTAR FLEX
-        # ==================================================
-
-        resultado = subprocess.run(
-            [str(LEXER_PATH)],
-            input=codigo,
-            text=True,
-            capture_output=True,
-            creationflags=subprocess.CREATE_NO_WINDOW
+        self.canvas.configure(
+            yscrollcommand=self.scrollbar.set
         )
 
+        self.scrollbar.pack(
+            side="right",
+            fill="y"
+        )
 
-        # ==================================================
-        # LIMPIAR RESULTADOS ANTERIORES
-        # ==================================================
+        self.canvas.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
 
-        for item in tabla.get_children():
+        self.main_frame = tk.Frame(
+            self.canvas,
+            bg=BG
+        )
 
-            tabla.delete(item)
+        self.canvas_window = self.canvas.create_window(
+            (0, 0),
+            window=self.main_frame,
+            anchor="nw"
+        )
 
+        self.main_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(
+                scrollregion=self.canvas.bbox("all")
+            )
+        )
 
-        # ==================================================
-        # CONTADORES
-        # ==================================================
+        self.canvas.bind(
+            "<Configure>",
+            self.ajustar_ancho_canvas
+        )
 
-        tokens = 0
-        errores = 0
+        # ----------------------------------------------------
+        # TÍTULO
+        # ----------------------------------------------------
 
+        titulo = tk.Label(
+            self.main_frame,
+            text="Analizador Léxico y Sintáctico",
+            font=("Segoe UI", 24, "bold"),
+            bg=BG,
+            fg=TEXT
+        )
 
-        # ==================================================
-        # PROCESAR RESULTADO DE FLEX
-        # ==================================================
+        titulo.pack(
+            pady=(25, 5)
+        )
 
-        lineas_resultado = resultado.stdout.splitlines()
+        subtitulo = tk.Label(
+            self.main_frame,
+            text="Análisis de código mediante FLEX + Analizador Sintáctico",
+            font=("Segoe UI", 11),
+            bg=BG,
+            fg=MUTED
+        )
 
+        subtitulo.pack(
+            pady=(0, 20)
+        )
 
-        for linea in lineas_resultado:
+        # ----------------------------------------------------
+        # EDITOR DE CÓDIGO
+        # ----------------------------------------------------
 
-            partes = linea.split("|")
+        editor_frame = tk.Frame(
+            self.main_frame,
+            bg=PANEL,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground="#d1d5db"
+        )
 
+        editor_frame.pack(
+            fill="x",
+            padx=25,
+            pady=5
+        )
 
-            if len(partes) == 3:
+        editor_title = tk.Label(
+            editor_frame,
+            text="Código fuente",
+            font=("Segoe UI", 13, "bold"),
+            bg=PANEL,
+            fg=TEXT
+        )
 
-                tipo = partes[0]
-                lexema = partes[1]
-                numero_linea = partes[2]
+        editor_title.pack(
+            anchor="w",
+            padx=15,
+            pady=(12, 5)
+        )
 
+        editor_container = tk.Frame(
+            editor_frame,
+            bg=PANEL
+        )
 
-                # Insertar resultado en la tabla
-                if tipo == "ERROR":
+        editor_container.pack(
+            fill="both",
+            expand=True,
+            padx=15,
+            pady=5
+        )
 
-                    tabla.insert(
-                        "",
-                        tk.END,
-                        values=(
-                            tipo,
-                            lexema,
-                            numero_linea
-                        ),
-                        tags=("error",)
-                    )
+        self.editor = tk.Text(
+            editor_container,
+            height=12,
+            font=("Consolas", 11),
+            bg="#111827",
+            fg="#f9fafb",
+            insertbackground="white",
+            padx=12,
+            pady=12,
+            wrap="none"
+        )
 
-                    errores += 1
+        self.editor_scroll = ttk.Scrollbar(
+            editor_container,
+            orient="vertical",
+            command=self.editor.yview
+        )
 
-                else:
+        self.editor.configure(
+            yscrollcommand=self.editor_scroll.set
+        )
 
-                    tabla.insert(
-                        "",
-                        tk.END,
-                        values=(
+        self.editor.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        self.editor_scroll.pack(
+            side="right",
+            fill="y"
+        )
+
+        # ----------------------------------------------------
+        # BOTONES
+        # ----------------------------------------------------
+
+        botones = tk.Frame(
+            editor_frame,
+            bg=PANEL
+        )
+
+        botones.pack(
+            fill="x",
+            padx=15,
+            pady=12
+        )
+
+        self.btn_analizar = tk.Button(
+            botones,
+            text="▶  Analizar código",
+            command=self.analizar_codigo,
+            bg=PRIMARY,
+            fg="white",
+            activebackground=PRIMARY_DARK,
+            activeforeground="white",
+            font=("Segoe UI", 11, "bold"),
+            relief="flat",
+            cursor="hand2",
+            padx=20,
+            pady=9
+        )
+
+        self.btn_analizar.pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        tk.Button(
+            botones,
+            text="📂  Cargar archivo",
+            command=self.cargar_archivo,
+            font=("Segoe UI", 10),
+            relief="flat",
+            bg="#e5e7eb",
+            fg=TEXT,
+            cursor="hand2",
+            padx=15,
+            pady=9
+        ).pack(
+            side="left",
+            padx=5
+        )
+
+        tk.Button(
+            botones,
+            text="🗑  Limpiar",
+            command=self.limpiar,
+            font=("Segoe UI", 10),
+            relief="flat",
+            bg="#e5e7eb",
+            fg=TEXT,
+            cursor="hand2",
+            padx=15,
+            pady=9
+        ).pack(
+            side="left",
+            padx=5
+        )
+
+        # ----------------------------------------------------
+        # RESULTADOS DEL ANÁLISIS
+        # ----------------------------------------------------
+
+        resultados = tk.Frame(
+            self.main_frame,
+            bg=BG
+        )
+
+        resultados.pack(
+            fill="x",
+            padx=25,
+            pady=15
+        )
+
+        # ====================================================
+        # ESTADO LÉXICO
+        # ====================================================
+
+        self.lexico_frame = tk.Frame(
+            resultados,
+            bg=PANEL,
+            highlightthickness=1,
+            highlightbackground="#d1d5db"
+        )
+
+        self.lexico_frame.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(0, 7)
+        )
+
+        tk.Label(
+            self.lexico_frame,
+            text="ANÁLISIS LÉXICO",
+            font=("Segoe UI", 11, "bold"),
+            bg=PANEL,
+            fg=TEXT
+        ).pack(
+            pady=(15, 5)
+        )
+
+        self.lexico_status = tk.Label(
+            self.lexico_frame,
+            text="Pendiente",
+            font=("Segoe UI", 16, "bold"),
+            bg=PANEL,
+            fg=MUTED
+        )
+
+        self.lexico_status.pack(
+            pady=(0, 15)
+        )
+
+        # ====================================================
+        # ESTADO SINTÁCTICO
+        # ====================================================
+
+        self.sintactico_frame = tk.Frame(
+            resultados,
+            bg=PANEL,
+            highlightthickness=1,
+            highlightbackground="#d1d5db"
+        )
+
+        self.sintactico_frame.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=7
+        )
+
+        tk.Label(
+            self.sintactico_frame,
+            text="ANÁLISIS SINTÁCTICO",
+            font=("Segoe UI", 11, "bold"),
+            bg=PANEL,
+            fg=TEXT
+        ).pack(
+            pady=(15, 5)
+        )
+
+        self.sintactico_status = tk.Label(
+            self.sintactico_frame,
+            text="Pendiente",
+            font=("Segoe UI", 16, "bold"),
+            bg=PANEL,
+            fg=MUTED
+        )
+
+        self.sintactico_status.pack(
+            pady=(0, 15)
+        )
+
+        # ====================================================
+        # ESTADÍSTICAS
+        # ====================================================
+
+        self.stats_frame = tk.Frame(
+            resultados,
+            bg=PANEL,
+            highlightthickness=1,
+            highlightbackground="#d1d5db"
+        )
+
+        self.stats_frame.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(7, 0)
+        )
+
+        tk.Label(
+            self.stats_frame,
+            text="ESTADÍSTICAS",
+            font=("Segoe UI", 11, "bold"),
+            bg=PANEL,
+            fg=TEXT
+        ).pack(
+            pady=(15, 5)
+        )
+
+        self.stats_label = tk.Label(
+            self.stats_frame,
+            text="Tokens: 0\nErrores léxicos: 0",
+            font=("Segoe UI", 11),
+            bg=PANEL,
+            fg=MUTED,
+            justify="center"
+        )
+
+        self.stats_label.pack(
+            pady=(0, 15)
+        )
+
+        # ----------------------------------------------------
+        # TABLA DE TOKENS
+        # ----------------------------------------------------
+
+        tokens_frame = tk.Frame(
+            self.main_frame,
+            bg=PANEL,
+            highlightthickness=1,
+            highlightbackground="#d1d5db"
+        )
+
+        tokens_frame.pack(
+            fill="both",
+            expand=True,
+            padx=25,
+            pady=5
+        )
+
+        tk.Label(
+            tokens_frame,
+            text="Tokens reconocidos",
+            font=("Segoe UI", 13, "bold"),
+            bg=PANEL,
+            fg=TEXT
+        ).pack(
+            anchor="w",
+            padx=15,
+            pady=(12, 8)
+        )
+
+        tabla_container = tk.Frame(
+            tokens_frame,
+            bg=PANEL
+        )
+
+        tabla_container.pack(
+            fill="both",
+            expand=True,
+            padx=15,
+            pady=(0, 15)
+        )
+
+        columnas = (
+            "numero",
+            "tipo",
+            "lexema",
+            "linea"
+        )
+
+        self.tabla = ttk.Treeview(
+            tabla_container,
+            columns=columnas,
+            show="headings",
+            height=15
+        )
+
+        self.tabla.heading(
+            "numero",
+            text="#"
+        )
+
+        self.tabla.heading(
+            "tipo",
+            text="TIPO"
+        )
+
+        self.tabla.heading(
+            "lexema",
+            text="LEXEMA"
+        )
+
+        self.tabla.heading(
+            "linea",
+            text="LÍNEA"
+        )
+
+        self.tabla.column(
+            "numero",
+            width=60,
+            anchor="center"
+        )
+
+        self.tabla.column(
+            "tipo",
+            width=180,
+            anchor="center"
+        )
+
+        self.tabla.column(
+            "lexema",
+            width=400,
+            anchor="w"
+        )
+
+        self.tabla.column(
+            "linea",
+            width=100,
+            anchor="center"
+        )
+
+        tabla_scroll = ttk.Scrollbar(
+            tabla_container,
+            orient="vertical",
+            command=self.tabla.yview
+        )
+
+        self.tabla.configure(
+            yscrollcommand=tabla_scroll.set
+        )
+
+        self.tabla.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        tabla_scroll.pack(
+            side="right",
+            fill="y"
+        )
+
+        # ----------------------------------------------------
+        # DETALLES DEL ERROR
+        # ----------------------------------------------------
+
+        error_frame = tk.Frame(
+            self.main_frame,
+            bg=PANEL,
+            highlightthickness=1,
+            highlightbackground="#d1d5db"
+        )
+
+        error_frame.pack(
+            fill="x",
+            padx=25,
+            pady=15
+        )
+
+        tk.Label(
+            error_frame,
+            text="Detalles del análisis",
+            font=("Segoe UI", 13, "bold"),
+            bg=PANEL,
+            fg=TEXT
+        ).pack(
+            anchor="w",
+            padx=15,
+            pady=(12, 5)
+        )
+
+        self.detalles = tk.Text(
+            error_frame,
+            height=5,
+            font=("Consolas", 10),
+            bg="#f9fafb",
+            fg=TEXT,
+            relief="flat",
+            wrap="word",
+            padx=12,
+            pady=8
+        )
+
+        self.detalles.pack(
+            fill="x",
+            padx=15,
+            pady=(0, 15)
+        )
+
+        self.detalles.configure(
+            state="disabled"
+        )
+
+        # ----------------------------------------------------
+        # BARRA DE ESTADO
+        # ----------------------------------------------------
+
+        self.status_bar = tk.Label(
+            self.main_frame,
+            text="Listo para analizar",
+            font=("Segoe UI", 10),
+            bg="#e5e7eb",
+            fg=TEXT,
+            anchor="w",
+            padx=15,
+            pady=8
+        )
+
+        self.status_bar.pack(
+            fill="x",
+            padx=25,
+            pady=(0, 25)
+        )
+
+        # ----------------------------------------------------
+        # SCROLL CON RUEDA DEL MOUSE
+        # ----------------------------------------------------
+
+        self.canvas.bind_all(
+            "<MouseWheel>",
+            self.scroll_mouse
+        )
+
+    # ========================================================
+    # AJUSTAR CANVAS
+    # ========================================================
+
+    def ajustar_ancho_canvas(self, event):
+        self.canvas.itemconfig(
+            self.canvas_window,
+            width=event.width
+        )
+
+    # ========================================================
+    # SCROLL
+    # ========================================================
+
+    def scroll_mouse(self, event):
+        self.canvas.yview_scroll(
+            int(-1 * (event.delta / 120)),
+            "units"
+        )
+
+    # ========================================================
+    # CARGAR EJEMPLO
+    # ========================================================
+
+    def cargar_ejemplo(self):
+
+        codigo = '''int edad = 23;
+float precio = 150.50;
+string nombre = "Jose";
+bool activo = true;
+
+if (edad >= 18) {
+    print("Mayor de edad");
+}'''
+
+        self.editor.delete(
+            "1.0",
+            tk.END
+        )
+
+        self.editor.insert(
+            "1.0",
+            codigo
+        )
+
+    # ========================================================
+    # CARGAR ARCHIVO
+    # ========================================================
+
+    def cargar_archivo(self):
+
+        archivo = filedialog.askopenfilename(
+            title="Seleccionar archivo",
+            filetypes=[
+                ("Archivos de texto", "*.txt"),
+                ("Todos los archivos", "*.*")
+            ]
+        )
+
+        if not archivo:
+            return
+
+        try:
+
+            contenido = Path(
+                archivo
+            ).read_text(
+                encoding="utf-8"
+            )
+
+            self.editor.delete(
+                "1.0",
+                tk.END
+            )
+
+            self.editor.insert(
+                "1.0",
+                contenido
+            )
+
+            self.status_bar.config(
+                text=f"Archivo cargado: {Path(archivo).name}"
+            )
+
+        except Exception as e:
+
+            messagebox.showerror(
+                "Error",
+                f"No se pudo cargar el archivo:\n\n{e}"
+            )
+
+    # ========================================================
+    # LIMPIAR
+    # ========================================================
+
+    def limpiar(self):
+
+        self.editor.delete(
+            "1.0",
+            tk.END
+        )
+
+        for item in self.tabla.get_children():
+            self.tabla.delete(item)
+
+        self.lexico_status.config(
+            text="Pendiente",
+            fg=MUTED
+        )
+
+        self.sintactico_status.config(
+            text="Pendiente",
+            fg=MUTED
+        )
+
+        self.stats_label.config(
+            text="Tokens: 0\nErrores léxicos: 0"
+        )
+
+        self.mostrar_detalles(
+            ""
+        )
+
+        self.status_bar.config(
+            text="Listo para analizar"
+        )
+
+    # ========================================================
+    # ANALIZAR CÓDIGO
+    # ========================================================
+
+    def analizar_codigo(self):
+
+        codigo = self.editor.get(
+            "1.0",
+            tk.END
+        ).strip()
+
+        if not codigo:
+
+            messagebox.showwarning(
+                "Código vacío",
+                "Escribe o carga código antes de analizar."
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # VERIFICAR ARCHIVOS
+        # ----------------------------------------------------
+
+        if not LEXER_PATH.exists():
+
+            messagebox.showerror(
+                "Error",
+                f"No se encontró el lexer:\n\n{LEXER_PATH}"
+            )
+
+            return
+
+        if not PARSER_PATH.exists():
+
+            messagebox.showerror(
+                "Error",
+                f"No se encontró el parser:\n\n{PARSER_PATH}"
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # LIMPIAR TABLA
+        # ----------------------------------------------------
+
+        for item in self.tabla.get_children():
+            self.tabla.delete(item)
+
+        self.btn_analizar.config(
+            state="disabled",
+            text="Analizando..."
+        )
+
+        self.status_bar.config(
+            text="Ejecutando análisis léxico..."
+        )
+
+        self.root.update_idletasks()
+
+        try:
+
+            # =================================================
+            # 1. ANÁLISIS LÉXICO
+            # =================================================
+
+            resultado_lexico = subprocess.run(
+                [str(LEXER_PATH)],
+                input=codigo,
+                text=True,
+                capture_output=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+
+            salida_lexica = resultado_lexico.stdout.strip()
+
+            error_lexico_sistema = resultado_lexico.stderr.strip()
+
+            tokens = []
+
+            errores_lexicos = 0
+
+            # -------------------------------------------------
+            # PROCESAR TOKENS
+            # -------------------------------------------------
+
+            if salida_lexica:
+
+                for linea in salida_lexica.splitlines():
+
+                    partes = linea.split("|")
+
+                    if len(partes) != 3:
+                        continue
+
+                    tipo = partes[0]
+                    lexema = partes[1]
+                    numero_linea = partes[2]
+
+                    tokens.append(
+                        (
                             tipo,
                             lexema,
                             numero_linea
                         )
                     )
 
-                    tokens += 1
+                    if tipo == "ERROR":
+                        errores_lexicos += 1
 
+            # -------------------------------------------------
+            # MOSTRAR TOKENS
+            # -------------------------------------------------
 
-        # ==================================================
-        # ACTUALIZAR CONTADORES
-        # ==================================================
+            for i, token in enumerate(
+                tokens,
+                start=1
+            ):
 
-        contador_tokens.config(
-            text=f"Tokens: {tokens}"
-        )
+                tipo, lexema, numero_linea = token
 
-        contador_errores.config(
-            text=f"Errores: {errores}"
-        )
+                self.tabla.insert(
+                    "",
+                    "end",
+                    values=(
+                        i,
+                        tipo,
+                        lexema,
+                        numero_linea
+                    )
+                )
 
+            # -------------------------------------------------
+            # ESTADO LÉXICO
+            # -------------------------------------------------
 
-        # ==================================================
-        # ACTUALIZAR ESTADO
-        # ==================================================
+            if errores_lexicos == 0:
 
-        if errores > 0:
+                self.lexico_status.config(
+                    text="✓ Correcto",
+                    fg=SUCCESS
+                )
 
-            estado.config(
-                text="⚠ Análisis terminado con errores léxicos."
+            else:
+
+                self.lexico_status.config(
+                    text=f"✗ {errores_lexicos} error(es)",
+                    fg=ERROR
+                )
+
+            # -------------------------------------------------
+            # ESTADÍSTICAS
+            # -------------------------------------------------
+
+            self.stats_label.config(
+                text=(
+                    f"Tokens: {len(tokens)}\n"
+                    f"Errores léxicos: {errores_lexicos}"
+                )
             )
 
-        else:
+            # =================================================
+            # SI HAY ERROR LÉXICO
+            # =================================================
 
-            estado.config(
-                text="✓ Análisis terminado correctamente."
+            if errores_lexicos > 0:
+
+                self.sintactico_status.config(
+                    text="No ejecutado",
+                    fg=WARNING
+                )
+
+                errores = []
+
+                for token in tokens:
+
+                    if token[0] == "ERROR":
+
+                        errores.append(
+                            f"Línea {token[2]}: símbolo no reconocido '{token[1]}'"
+                        )
+
+                self.mostrar_detalles(
+                    "ERRORES LÉXICOS:\n\n" +
+                    "\n".join(errores)
+                )
+
+                self.status_bar.config(
+                    text="Análisis finalizado con errores léxicos."
+                )
+
+                return
+
+            # =================================================
+            # 2. ANÁLISIS SINTÁCTICO
+            # =================================================
+
+            self.status_bar.config(
+                text="Análisis léxico correcto. Ejecutando análisis sintáctico..."
             )
 
+            self.root.update_idletasks()
 
-        # Actualizar área de scroll
-        contenido.update_idletasks()
+            resultado_sintactico = subprocess.run(
+                [
+                    sys.executable,
+                    str(PARSER_PATH)
+                ],
+                input=salida_lexica,
+                text=True,
+                capture_output=True
+            )
 
-        canvas.configure(
-            scrollregion=canvas.bbox("all")
+            salida_sintactica = (
+                resultado_sintactico.stdout.strip()
+            )
+
+            error_sintactico_sistema = (
+                resultado_sintactico.stderr.strip()
+            )
+
+            # =================================================
+            # RESULTADO SINTÁCTICO
+            # =================================================
+
+            if salida_sintactica.startswith(
+                "SINTAXIS_OK"
+            ):
+
+                self.sintactico_status.config(
+                    text="✓ Correcto",
+                    fg=SUCCESS
+                )
+
+                self.mostrar_detalles(
+                    "ANÁLISIS COMPLETADO CORRECTAMENTE\n\n"
+                    "✓ Análisis léxico: correcto\n"
+                    "✓ Análisis sintáctico: correcto\n\n"
+                    f"Se reconocieron {len(tokens)} tokens."
+                )
+
+                self.status_bar.config(
+                    text="✓ Análisis completado correctamente."
+                )
+
+            else:
+
+                self.sintactico_status.config(
+                    text="✗ Error",
+                    fg=ERROR
+                )
+
+                self.mostrar_detalles(
+                    "ERROR SINTÁCTICO:\n\n" +
+                    salida_sintactica
+                )
+
+                self.status_bar.config(
+                    text="✗ Se encontraron errores sintácticos."
+                )
+
+            # =================================================
+            # ERRORES INTERNOS
+            # =================================================
+
+            if error_lexico_sistema:
+
+                self.mostrar_detalles(
+                    self.obtener_detalles_actuales()
+                    + "\n\nSalida del lexer:\n"
+                    + error_lexico_sistema
+                )
+
+            if error_sintactico_sistema:
+
+                self.mostrar_detalles(
+                    self.obtener_detalles_actuales()
+                    + "\n\nSalida del parser:\n"
+                    + error_sintactico_sistema
+                )
+
+        except Exception as e:
+
+            self.lexico_status.config(
+                text="Error",
+                fg=ERROR
+            )
+
+            self.sintactico_status.config(
+                text="Error",
+                fg=ERROR
+            )
+
+            self.mostrar_detalles(
+                f"ERROR AL EJECUTAR EL ANALIZADOR:\n\n{e}"
+            )
+
+            self.status_bar.config(
+                text="Error durante el análisis."
+            )
+
+            messagebox.showerror(
+                "Error",
+                f"Ocurrió un error durante el análisis:\n\n{e}"
+            )
+
+        finally:
+
+            self.btn_analizar.config(
+                state="normal",
+                text="▶  Analizar código"
+            )
+
+    # ========================================================
+    # MOSTRAR DETALLES
+    # ========================================================
+
+    def mostrar_detalles(self, texto):
+
+        self.detalles.config(
+            state="normal"
         )
 
-
-    except Exception as e:
-
-        messagebox.showerror(
-            "Error",
-            f"Ocurrió un problema al ejecutar el analizador:\n\n{e}"
-        )
-
-
-# ==========================================================
-# FUNCIÓN LIMPIAR
-# ==========================================================
-
-def limpiar():
-
-    editor.delete(
-        "1.0",
-        tk.END
-    )
-
-
-    for item in tabla.get_children():
-
-        tabla.delete(item)
-
-
-    contador_tokens.config(
-        text="Tokens: 0"
-    )
-
-
-    contador_errores.config(
-        text="Errores: 0"
-    )
-
-
-    estado.config(
-        text="Esperando código..."
-    )
-
-
-    actualizar_lineas()
-
-
-# ==========================================================
-# FUNCIÓN CARGAR ARCHIVO
-# ==========================================================
-
-def cargar_archivo():
-
-    archivo = filedialog.askopenfilename(
-        title="Seleccionar archivo",
-        filetypes=[
-            ("Archivos de texto", "*.txt"),
-            ("Todos los archivos", "*.*")
-        ]
-    )
-
-
-    if not archivo:
-
-        return
-
-
-    try:
-
-        with open(
-            archivo,
-            "r",
-            encoding="utf-8"
-        ) as f:
-
-            contenido_archivo = f.read()
-
-
-        editor.delete(
+        self.detalles.delete(
             "1.0",
             tk.END
         )
 
-
-        editor.insert(
+        self.detalles.insert(
             "1.0",
-            contenido_archivo
+            texto
         )
 
-
-        actualizar_lineas()
-
-
-        estado.config(
-            text=f"Archivo cargado: {Path(archivo).name}"
+        self.detalles.config(
+            state="disabled"
         )
 
+    # ========================================================
+    # OBTENER DETALLES ACTUALES
+    # ========================================================
 
-    except Exception as e:
+    def obtener_detalles_actuales(self):
 
-        messagebox.showerror(
-            "Error",
-            f"No se pudo abrir el archivo:\n\n{e}"
+        self.detalles.config(
+            state="normal"
         )
 
+        texto = self.detalles.get(
+            "1.0",
+            tk.END
+        ).strip()
 
-# ==========================================================
-# SECCIÓN CÓDIGO FUENTE
-# ==========================================================
+        self.detalles.config(
+            state="disabled"
+        )
 
-frame_codigo = tk.LabelFrame(
-    contenido,
-    text=" Código fuente ",
-    font=("Arial", 11, "bold"),
-    padx=10,
-    pady=10
-)
+        return texto
 
-frame_codigo.pack(
-    fill="x",
-    padx=20,
-    pady=10
-)
 
-
-# ==========================================================
-# EDITOR
-# ==========================================================
-
-frame_editor = tk.Frame(
-    frame_codigo
-)
-
-frame_editor.pack(
-    fill="x"
-)
-
-
-# ==========================================================
-# NÚMEROS DE LÍNEA
-# ==========================================================
-
-numeros_linea = tk.Text(
-    frame_editor,
-    width=5,
-    height=12,
-    padx=5,
-    pady=5,
-    font=("Consolas", 11),
-    bg="#eeeeee",
-    fg="#555555",
-    state="disabled",
-    takefocus=0
-)
-
-numeros_linea.pack(
-    side="left",
-    fill="y"
-)
-
-
-# ==========================================================
-# EDITOR DE CÓDIGO
-# ==========================================================
-
-editor = tk.Text(
-    frame_editor,
-    height=12,
-    font=("Consolas", 11),
-    wrap="none",
-    undo=True
-)
-
-editor.pack(
-    side="left",
-    fill="both",
-    expand=True
-)
-
-
-# ==========================================================
-# SCROLLBAR DEL EDITOR
-# ==========================================================
-
-scroll_editor = ttk.Scrollbar(
-    frame_editor,
-    orient="vertical",
-    command=editor.yview
-)
-
-scroll_editor.pack(
-    side="right",
-    fill="y"
-)
-
-
-editor.configure(
-    yscrollcommand=scroll_editor.set
-)
-
-
-# ==========================================================
-# CÓDIGO DE EJEMPLO
-# ==========================================================
-
-codigo_ejemplo = """int edad = 23;
-float precio = 150.50;
-
-if (edad >= 18) {
-    print("Mayor de edad");
-}
-"""
-
-
-editor.insert(
-    "1.0",
-    codigo_ejemplo
-)
-
-
-actualizar_lineas()
-
-
-editor.bind(
-    "<KeyRelease>",
-    actualizar_lineas
-)
-
-
-# ==========================================================
-# BOTONES
-# ==========================================================
-
-frame_botones = tk.Frame(
-    contenido
-)
-
-frame_botones.pack(
-    pady=10
-)
-
-
-boton_analizar = ttk.Button(
-    frame_botones,
-    text="Analizar",
-    command=analizar_codigo
-)
-
-boton_analizar.pack(
-    side="left",
-    padx=5
-)
-
-
-boton_cargar = ttk.Button(
-    frame_botones,
-    text="Cargar archivo",
-    command=cargar_archivo
-)
-
-boton_cargar.pack(
-    side="left",
-    padx=5
-)
-
-
-boton_limpiar = ttk.Button(
-    frame_botones,
-    text="Limpiar",
-    command=limpiar
-)
-
-boton_limpiar.pack(
-    side="left",
-    padx=5
-)
-
-
-# ==========================================================
-# SECCIÓN DE RESULTADOS
-# ==========================================================
-
-frame_resultados = tk.LabelFrame(
-    contenido,
-    text=" Tokens reconocidos ",
-    font=("Arial", 11, "bold"),
-    padx=10,
-    pady=10
-)
-
-frame_resultados.pack(
-    fill="x",
-    padx=20,
-    pady=10
-)
-
-
-# ==========================================================
-# TABLA
-# ==========================================================
-
-frame_tabla = tk.Frame(
-    frame_resultados
-)
-
-frame_tabla.pack(
-    fill="x"
-)
-
-
-columnas = (
-    "token",
-    "lexema",
-    "linea"
-)
-
-
-tabla = ttk.Treeview(
-    frame_tabla,
-    columns=columnas,
-    show="headings",
-    height=15
-)
-
-
-tabla.heading(
-    "token",
-    text="TOKEN"
-)
-
-tabla.heading(
-    "lexema",
-    text="LEXEMA"
-)
-
-tabla.heading(
-    "linea",
-    text="LÍNEA"
-)
-
-
-tabla.column(
-    "token",
-    width=220,
-    anchor="center"
-)
-
-tabla.column(
-    "lexema",
-    width=550,
-    anchor="center"
-)
-
-tabla.column(
-    "linea",
-    width=100,
-    anchor="center"
-)
-
-
-tabla.pack(
-    side="left",
-    fill="both",
-    expand=True
-)
-
-
-# ==========================================================
-# SCROLLBAR DE LA TABLA
-# ==========================================================
-
-scroll_tabla = ttk.Scrollbar(
-    frame_tabla,
-    orient="vertical",
-    command=tabla.yview
-)
-
-scroll_tabla.pack(
-    side="right",
-    fill="y"
-)
-
-
-tabla.configure(
-    yscrollcommand=scroll_tabla.set
-)
-
-
-# ==========================================================
-# ESTILO PARA ERRORES
-# ==========================================================
-
-tabla.tag_configure(
-    "error",
-    background="#ffcccc"
-)
-
-
-# ==========================================================
-# ESTADÍSTICAS
-# ==========================================================
-
-frame_estadisticas = tk.Frame(
-    contenido
-)
-
-frame_estadisticas.pack(
-    fill="x",
-    padx=20,
-    pady=5
-)
-
-
-contador_tokens = tk.Label(
-    frame_estadisticas,
-    text="Tokens: 0",
-    font=("Arial", 10, "bold")
-)
-
-contador_tokens.pack(
-    side="left"
-)
-
-
-contador_errores = tk.Label(
-    frame_estadisticas,
-    text="Errores: 0",
-    font=("Arial", 10, "bold")
-)
-
-contador_errores.pack(
-    side="left",
-    padx=30
-)
-
-
-# ==========================================================
-# ESTADO
-# ==========================================================
-
-estado = tk.Label(
-    contenido,
-    text="Esperando código...",
-    anchor="w",
-    font=("Arial", 10)
-)
-
-estado.pack(
-    fill="x",
-    padx=20,
-    pady=10
-)
-
-
-# ==========================================================
+# ============================================================
 # INICIAR APLICACIÓN
-# ==========================================================
+# ============================================================
 
-ventana.mainloop()
+if __name__ == "__main__":
+
+    root = tk.Tk()
+
+    app = AnalizadorApp(
+        root
+    )
+
+    root.mainloop()
